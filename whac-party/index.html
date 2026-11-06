@@ -1,0 +1,403 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<meta name="color-scheme" content="light dark">
+<title>Whac Party</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Lilita+One&family=Nunito:wght@500;700;800&display=swap" rel="stylesheet">
+<style>
+  /* Layout: game board on the left, "your targets" roster on the right; stacks on phones.
+     Look: lawn green and burrowed dirt, orange for action, blue for "spare" targets. */
+  :root {
+    --bg: #dbe9c8;
+    --surface: #f4f9ea;
+    --ink: #22301b;
+    --ink-soft: #55684a;
+    --line: #bcd1a3;
+    --grass: #7bb957;
+    --dirt: #8a5a33;
+    --dirt-dark: #4a2f19;
+    --hole: #2a1a0d;
+    --accent: #f0662b;
+    --accent-ink: #ffffff;
+    --spare: #2f7fd8;
+    --danger: #c93b3b;
+    --display: "Lilita One", "Arial Rounded MT Bold", system-ui, sans-serif;
+    --body: "Nunito", system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #121a10; --surface: #1d2a19; --ink: #e5eed9; --ink-soft: #9db28d; --line: #33472d;
+      --grass: #4d8a33; --dirt: #7a4e2b; --dirt-dark: #3a2412; --hole: #120a04;
+      --accent: #ff7a3d; --accent-ink: #1a0d05; --spare: #5aa2f2; --danger: #ef6b6b;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #121a10; --surface: #1d2a19; --ink: #e5eed9; --ink-soft: #9db28d; --line: #33472d;
+    --grass: #4d8a33; --dirt: #7a4e2b; --dirt-dark: #3a2412; --hole: #120a04;
+    --accent: #ff7a3d; --accent-ink: #1a0d05; --spare: #5aa2f2; --danger: #ef6b6b;
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    background: var(--bg); color: var(--ink); font-family: var(--body); font-size: 16px; line-height: 1.45;
+    padding-block: 20px 40px;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+  }
+  .wrap { max-width: 1040px; margin: 0 auto; display: grid; gap: 20px; }
+  header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+  h1 { font-family: var(--display); font-weight: 400; font-size: clamp(2rem, 6vw, 3rem); margin: 0; letter-spacing: .01em; line-height: 1; text-wrap: balance; }
+  h1 span { color: var(--accent); }
+  .tag { margin: 0; color: var(--ink-soft); font-weight: 700; }
+  h2 { font-family: var(--display); font-weight: 400; font-size: 1.4rem; margin: 0; letter-spacing: .01em; }
+
+  main { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 20px; align-items: start; }
+  @media (max-width: 820px) { main { grid-template-columns: minmax(0, 1fr); } }
+
+  /* HUD */
+  .hud { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 12px; }
+  .stat { background: var(--surface); border: 2px solid var(--line); border-radius: 14px; padding: 8px 12px; min-width: 0; }
+  .stat small { display: block; font-size: .72rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-soft); }
+  .stat b { font-family: var(--display); font-weight: 400; font-size: 1.9rem; line-height: 1.1; font-variant-numeric: tabular-nums; }
+  .timebar { height: 10px; border-radius: 99px; background: var(--line); overflow: hidden; margin-bottom: 12px; }
+  .timebar i { display: block; height: 100%; width: 100%; background: var(--accent); transform-origin: left; transform: scaleX(1); }
+
+  /* Board */
+  .board {
+    position: relative; background: var(--grass); border-radius: 22px; padding: 4%;
+    border: 3px solid color-mix(in srgb, var(--grass) 70%, #000);
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 2%;
+    touch-action: manipulation; user-select: none; -webkit-user-select: none;
+  }
+  @media (pointer: fine) { .board.playing, .board.playing .pit { cursor: none; } }
+
+  .pit { position: relative; aspect-ratio: 1; border: 0; padding: 0; background: transparent; color: inherit; font: inherit; -webkit-tap-highlight-color: transparent; border-radius: 16px; }
+  .pit:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+  .pit .hole { position: absolute; left: 6%; right: 6%; bottom: 8%; height: 30%; border-radius: 50%; background: var(--hole); box-shadow: 0 0 0 5px var(--dirt), inset 0 6px 0 rgba(0,0,0,.35); }
+  .pit .win { position: absolute; left: 6%; right: 6%; top: 0; bottom: 23%; overflow: hidden; }
+  .pit .lip { position: absolute; left: 6%; right: 6%; bottom: 8%; height: 15%; background: var(--dirt); border-radius: 0 0 50% 50% / 0 0 100% 100%; box-shadow: 0 5px 0 var(--dirt-dark); }
+
+  .mole { position: absolute; left: 11%; width: 78%; aspect-ratio: 1; bottom: 0; transform: translateY(108%); transition: transform .14s ease-out; }
+  .pit.up .mole { transform: translateY(0); }
+  .pit.down .mole { transition-duration: .2s; }
+  .mole img { width: 100%; height: 100%; object-fit: cover; border-radius: 50%; border: 4px solid var(--dirt-dark); background: var(--surface); display: block; pointer-events: none; -webkit-user-drag: none; transform-origin: 50% 100%; }
+  .pit.spare .mole img { border-color: var(--spare); }
+  .pit.spare .mole::after { content: "Spare"; position: absolute; left: 50%; bottom: -2px; transform: translateX(-50%); background: var(--spare); color: #fff; font-weight: 800; font-size: .62rem; letter-spacing: .06em; text-transform: uppercase; padding: 1px 7px; border-radius: 99px; }
+  .pit.bonked .mole img { animation: squash .3s ease-out forwards; }
+  .pit.oops .mole img { animation: shake .3s linear; filter: saturate(.4) hue-rotate(-20deg); }
+  @keyframes squash { 0% { transform: scale(1,1); } 30% { transform: scale(1.25,.45); } 100% { transform: scale(1.1,.6) rotate(-6deg); filter: brightness(.8); } }
+  @keyframes shake { 0%,100% { transform: translateX(0); } 25% { transform: translateX(-8%); } 75% { transform: translateX(8%); } }
+
+  .pop { position: absolute; left: 50%; top: 18%; z-index: 3; transform: translateX(-50%); font-family: var(--display); font-size: clamp(1rem, 4vw, 1.5rem); color: #fff; text-shadow: 0 2px 0 var(--dirt-dark), 0 0 8px rgba(0,0,0,.4); white-space: nowrap; pointer-events: none; animation: floatup .8s ease-out forwards; }
+  .pop.bad { color: #ffb3b3; }
+  @keyframes floatup { from { opacity: 1; transform: translate(-50%, 0) scale(.8); } 20% { transform: translate(-50%, -10%) scale(1.15); } to { opacity: 0; transform: translate(-50%, -60%) scale(1); } }
+
+  .mallet { position: fixed; left: 0; top: 0; width: 84px; height: 84px; pointer-events: none; z-index: 20; display: none; transform-origin: 0 0; }
+  .mallet svg { width: 100%; height: 100%; display: block; transform-origin: 86% 90%; transition: transform .06s; transform: rotate(0deg); }
+  .mallet.swing svg { transform: rotate(-40deg); }
+  .mallet.show { display: block; }
+
+  /* Overlay */
+  .overlay { position: absolute; inset: 0; border-radius: 19px; display: grid; place-items: center; padding: 16px; background: color-mix(in srgb, var(--bg) 78%, transparent); backdrop-filter: blur(3px); z-index: 5; }
+  .overlay[hidden] { display: none; }
+  .overlay .card { background: var(--surface); border: 3px solid var(--dirt); border-radius: 20px; padding: 20px; text-align: center; max-width: 340px; display: grid; gap: 10px; box-shadow: 0 6px 0 var(--dirt-dark); }
+  .overlay h2 { font-size: 1.9rem; }
+  .overlay p { margin: 0; color: var(--ink-soft); font-weight: 700; }
+  .overlay .big { font-family: var(--display); font-size: 3rem; line-height: 1; color: var(--accent); font-variant-numeric: tabular-nums; }
+
+  button.btn { font-family: var(--display); font-size: 1.3rem; letter-spacing: .02em; background: var(--accent); color: var(--accent-ink); border: 0; border-radius: 14px; padding: 10px 22px; box-shadow: 0 4px 0 color-mix(in srgb, var(--accent) 60%, #000); cursor: pointer; }
+  button.btn:active { transform: translateY(3px); box-shadow: 0 1px 0 color-mix(in srgb, var(--accent) 60%, #000); }
+  button.btn:focus-visible, .pit:focus-visible, select:focus-visible, input:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+
+  /* Panel */
+  .panel { background: var(--surface); border: 2px solid var(--line); border-radius: 18px; padding: 16px; display: grid; gap: 14px; min-width: 0; }
+  .roster { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(88px, 1fr)); gap: 10px; }
+  .roster li { position: relative; display: grid; gap: 4px; justify-items: center; min-width: 0; }
+  .roster img { width: 100%; max-width: 88px; aspect-ratio: 1; object-fit: cover; border-radius: 50%; border: 4px solid var(--dirt-dark); background: var(--bg); }
+  .roster li.spare img { border-color: var(--spare); }
+  .roster .nm { font-size: .78rem; font-weight: 700; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink-soft); }
+  .hint { margin: 0; font-size: .85rem; color: var(--ink-soft); font-weight: 700; }
+  .hint.warn { color: var(--danger); }
+  .settings { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; border-top: 2px solid var(--line); padding-top: 14px; }
+  .settings label { display: grid; gap: 3px; font-weight: 800; font-size: .78rem; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-soft); }
+  .settings select { font: inherit; font-weight: 700; font-size: 1rem; text-transform: none; letter-spacing: 0; color: var(--ink); background: var(--bg); border: 2px solid var(--line); border-radius: 10px; padding: 6px 8px; }
+  .settings .row { grid-column: 1 / -1; display: flex; align-items: center; gap: 8px; text-transform: none; letter-spacing: 0; font-size: .95rem; color: var(--ink); }
+
+  @media (prefers-reduced-motion: reduce) { .mole, .pop, .pit.bonked .mole img, .pit.oops .mole img { transition: none; animation-duration: .01s; } }
+  .role { border: 2px solid var(--dirt-dark); color: var(--ink); font-weight: 800; font-size: .74rem; border-radius: 99px; padding: 2px 10px; }
+  .roster li.spare .role { border-color: var(--spare); background: var(--spare); color: #fff; }
+  .mole img, .roster img { object-position: 50% 22%; }
+  html { padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }
+  body { margin: 0; } img { max-width: 100%; } [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <h1>Whac <span>Party</span></h1>
+    <p class="tag">Bonk the faces. Spare the blue rings.</p>
+  </header>
+
+  <main>
+    <section aria-label="Game">
+      <div class="hud">
+        <div class="stat"><small>Score</small><b id="score">0</b></div>
+        <div class="stat"><small>Time</small><b id="time">30</b></div>
+        <div class="stat"><small>Best</small><b id="best">0</b></div>
+      </div>
+      <div class="timebar" aria-hidden="true"><i id="bar"></i></div>
+
+      <div class="board" id="board">
+        <div class="overlay" id="overlay">
+          <div class="card" id="card"></div>
+        </div>
+      </div>
+    </section>
+
+    <aside class="panel" aria-label="Who is in the holes">
+      <h2>Who&rsquo;s in the holes</h2>
+      <ul class="roster" id="roster"></ul>
+      <p class="hint" id="hint"></p>
+      <div class="settings">
+        <label for="dur">Round length
+          <select id="dur"><option value="20">20 seconds</option><option value="30" selected>30 seconds</option><option value="60">60 seconds</option></select>
+        </label>
+        <label for="lvl">Speed
+          <select id="lvl"><option value="easy">Gentle</option><option value="normal" selected>Normal</option><option value="hard">Frantic</option></select>
+        </label>
+        <label class="row" for="snd"><input type="checkbox" id="snd" checked> Sound effects</label>
+      </div>
+    </aside>
+  </main>
+</div>
+
+<div class="mallet" id="mallet" aria-hidden="true">
+  <svg viewBox="0 0 90 90"><g>
+    <rect x="40" y="30" width="12" height="56" rx="5" transform="rotate(-38 46 58)" fill="#c58a4b" stroke="#4a2f19" stroke-width="3"/>
+    <rect x="4" y="6" width="44" height="30" rx="8" transform="rotate(-38 26 21)" fill="#e8553a" stroke="#4a2f19" stroke-width="3"/>
+    <rect x="9" y="11" width="10" height="20" rx="4" transform="rotate(-38 14 21)" fill="#ffffff" opacity=".35"/>
+  </g></svg>
+</div>
+
+<script>
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+  var board = $('board'), overlay = $('overlay'), card = $('card'), roster = $('roster'), hint = $('hint');
+  var scoreEl = $('score'), timeEl = $('time'), bestEl = $('best'), bar = $('bar'), mallet = $('mallet');
+  var KEY_ITEMS = 'whacparty.items.v1', KEY_BEST = 'whacparty.best.v1', KEY_SET = 'whacparty.settings.v1';
+
+  function lsGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+  function lsSet(k, v) { try { localStorage.setItem(k, v); return true; } catch (e) { return false; } }
+
+
+  /* ---------- the faces: fixed in the page, visitors cannot change them ----------
+     To change who appears, edit this list and re-upload. Put the image files in the
+     "images" folder next to index.html. spare: true makes a face a "do not hit" face. */
+  var FACES = [
+    { name: 'Face 1', src: 'images/1.jpg', spare: false },
+    { name: 'Face 2', src: 'images/2.jpg', spare: false },
+    { name: 'Face 3', src: 'images/3.jpg', spare: false }
+  ];
+
+  /* Shown only if an image file is missing, so the game still runs. */
+  function placeholder(i) {
+    var bg = ['#f6c453', '#8fd0c4', '#e49aa8'][i % 3];
+    var svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160"><rect width="160" height="160" fill="' + bg + '"/>' +
+      '<circle cx="80" cy="86" r="48" fill="#f1c7a0"/><circle cx="62" cy="86" r="6" fill="#222"/><circle cx="98" cy="86" r="6" fill="#222"/>' +
+      '<path d="M60 108 Q80 124 100 108" stroke="#222" stroke-width="5" fill="none" stroke-linecap="round"/></svg>';
+    return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+  }
+  function setSrc(img, item) {
+    img.onerror = function () { img.onerror = null; img.src = placeholder(items.indexOf(item)); };
+    img.src = item.src;
+  }
+
+  /* ---------- state ---------- */
+  var items = FACES.map(function (f) { return Object.freeze({ name: f.name, src: f.src, spare: !!f.spare }); });
+  Object.freeze(items);
+  var settings = { dur: 30, lvl: 'normal', snd: true };
+  var best = 0;
+  try { var s = JSON.parse(lsGet(KEY_SET) || 'null'); if (s) settings = Object.assign(settings, s); } catch (e) {}
+  best = parseInt(lsGet(KEY_BEST) || '0', 10) || 0;
+  function saveSettings() { lsSet(KEY_SET, JSON.stringify(settings)); }
+
+  /* ---------- board ---------- */
+  var pits = [];
+  for (var i = 0; i < 9; i++) {
+    var p = document.createElement('button');
+    p.type = 'button'; p.className = 'pit'; p.setAttribute('aria-label', 'Hole ' + (i + 1));
+    p.innerHTML = '<span class="hole"></span><span class="win"><span class="mole"><img alt=""></span></span><span class="lip"></span>';
+    board.insertBefore(p, overlay);
+    pits.push({ el: p, img: p.querySelector('img'), up: false, hit: false, item: null, t: 0 });
+    (function (idx) {
+      p.addEventListener('pointerdown', function (e) { e.preventDefault(); whac(idx); });
+      p.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); whac(idx); } });
+    })(i);
+  }
+
+
+  /* ---------- roster (read only) ---------- */
+  function setHint(msg, warn) { hint.textContent = msg; hint.className = 'hint' + (warn ? ' warn' : ''); }
+  function whacCount() { return items.filter(function (it) { return !it.spare; }).length; }
+
+  function renderRoster() {
+    roster.innerHTML = '';
+    items.forEach(function (it) {
+      var li = document.createElement('li');
+      if (it.spare) li.className = 'spare';
+      var img = document.createElement('img'); img.alt = it.name; setSrc(img, it);
+      var nm = document.createElement('span'); nm.className = 'nm'; nm.textContent = it.name; nm.title = it.name;
+      var role = document.createElement('span'); role.className = 'role'; role.textContent = it.spare ? 'Spare' : 'Whac';
+      li.append(img, nm, role);
+      roster.appendChild(li);
+    });
+    var spares = items.length - whacCount();
+    setHint('Whac a face for +10.' + (spares ? ' Hit a blue-ringed spare and lose 15.' : ''), false);
+    updateCard();
+  }
+
+  /* ---------- settings ---------- */
+  $('dur').value = String(settings.dur); $('lvl').value = settings.lvl; $('snd').checked = !!settings.snd;
+  $('dur').addEventListener('change', function (e) { settings.dur = +e.target.value; saveSettings(); if (!running) timeEl.textContent = settings.dur; });
+  $('lvl').addEventListener('change', function (e) { settings.lvl = e.target.value; saveSettings(); });
+  $('snd').addEventListener('change', function (e) { settings.snd = e.target.checked; saveSettings(); });
+
+  /* ---------- sound ---------- */
+  var ac = null;
+  function tone(type, f0, f1, dur, vol) {
+    if (!settings.snd) return;
+    try {
+      ac = ac || new (window.AudioContext || window.webkitAudioContext)();
+      if (ac.state === 'suspended') ac.resume();
+      var o = ac.createOscillator(), g = ac.createGain(), t = ac.currentTime;
+      o.type = type; o.frequency.setValueAtTime(f0, t); o.frequency.exponentialRampToValueAtTime(f1, t + dur);
+      g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+      o.connect(g); g.connect(ac.destination); o.start(t); o.stop(t + dur);
+    } catch (e) {}
+  }
+  var sfx = {
+    bonk: function () { tone('triangle', 300, 60, 0.14, 0.5); tone('square', 900, 200, 0.05, 0.12); },
+    oops: function () { tone('sawtooth', 160, 70, 0.3, 0.25); },
+    end: function () { tone('triangle', 520, 780, 0.25, 0.3); }
+  };
+
+  /* ---------- game ---------- */
+  var LEVELS = { easy: { up: 1300, gapMin: 700, gapMax: 1100, max: 2 }, normal: { up: 950, gapMin: 450, gapMax: 850, max: 3 }, hard: { up: 700, gapMin: 300, gapMax: 600, max: 4 } };
+  var running = false, score = 0, deadline = 0, startAt = 0, total = 0, spawnT = 0, tick = 0;
+
+  function rand(a, b) { return a + Math.random() * (b - a); }
+  function frac() { return Math.min(1, (performance.now() - startAt) / total); }
+
+  function pickItem() {
+    var spares = items.filter(function (i) { return i.spare; }), targets = items.filter(function (i) { return !i.spare; });
+    if (spares.length && Math.random() < 0.25) return spares[Math.floor(Math.random() * spares.length)];
+    return targets[Math.floor(Math.random() * targets.length)];
+  }
+  function popUp(idx) {
+    var p = pits[idx], L = LEVELS[settings.lvl];
+    p.item = pickItem(); p.hit = false; p.up = true;
+    setSrc(p.img, p.item);
+    p.el.classList.remove('bonked', 'oops', 'down');
+    p.el.classList.toggle('spare', !!p.item.spare);
+    p.el.classList.add('up');
+    p.t = setTimeout(function () { goDown(idx); }, L.up * (1 - 0.45 * frac()));
+  }
+  function goDown(idx) {
+    var p = pits[idx]; clearTimeout(p.t);
+    p.up = false; p.el.classList.remove('up'); p.el.classList.add('down');
+  }
+  function spawn() {
+    if (!running) return;
+    var L = LEVELS[settings.lvl], f = frac();
+    var maxUp = 1 + Math.floor(f * (L.max - 1) + 0.5);
+    var up = pits.filter(function (p) { return p.up; }).length;
+    var free = []; pits.forEach(function (p, i) { if (!p.up) free.push(i); });
+    if (up < maxUp && free.length) popUp(free[Math.floor(Math.random() * free.length)]);
+    spawnT = setTimeout(spawn, rand(L.gapMin, L.gapMax) * (1 - 0.4 * f));
+  }
+  function floatText(p, text, bad) {
+    var s = document.createElement('span'); s.className = 'pop' + (bad ? ' bad' : ''); s.textContent = text;
+    p.el.appendChild(s); setTimeout(function () { s.remove(); }, 850);
+  }
+  function setScore(n) { score = n; scoreEl.textContent = n; }
+
+  function whac(idx) {
+    mallet.classList.add('swing'); setTimeout(function () { mallet.classList.remove('swing'); }, 90);
+    if (!running) return;
+    var p = pits[idx];
+    if (!p.up || p.hit) return;
+    p.hit = true; clearTimeout(p.t);
+    if (p.item.spare) {
+      setScore(Math.max(0, score - 15)); p.el.classList.add('oops'); floatText(p, 'Not them! −15', true); sfx.oops();
+    } else {
+      setScore(score + 10); p.el.classList.add('bonked');
+      floatText(p, ['BONK!', 'WHAC!', 'OOF!', 'POW!'][Math.floor(Math.random() * 4)] + ' +10'); sfx.bonk();
+    }
+    p.t = setTimeout(function () { goDown(idx); }, 380);
+  }
+
+  function updateCard() {
+    if (running) return;
+    var ready = items.length && whacCount();
+    if (card.dataset.mode === 'over') return;
+    card.dataset.mode = 'start';
+    card.innerHTML = '<h2>Ready?</h2><p>' + (ready ? 'Whac the faces as they pop up.' + (items.length - whacCount() ? ' Hit a blue-ringed spare and you lose points.' : '') + '' : 'This game has no faces to whac yet.') + '</p>';
+    var b = document.createElement('button'); b.className = 'btn'; b.type = 'button'; b.textContent = 'Start'; b.disabled = !ready;
+    if (!ready) b.style.opacity = .5;
+    b.addEventListener('click', start); card.appendChild(b);
+  }
+
+  function start() {
+    if (!items.length || !whacCount()) return;
+    pits.forEach(function (p, i) { clearTimeout(p.t); p.up = false; p.el.classList.remove('up', 'down', 'bonked', 'oops'); });
+    setScore(0); running = true; total = settings.dur * 1000; startAt = performance.now(); deadline = startAt + total;
+    overlay.hidden = true; board.classList.add('playing'); card.dataset.mode = '';
+    tone('triangle', 400, 600, 0.1, 0.2);
+    clearTimeout(spawnT); spawnT = setTimeout(spawn, 350);
+    clearInterval(tick); tick = setInterval(frame, 80); frame();
+  }
+  function frame() {
+    var left = Math.max(0, deadline - performance.now());
+    timeEl.textContent = Math.ceil(left / 1000);
+    bar.style.transform = 'scaleX(' + (left / total) + ')';
+    if (left <= 0) end();
+  }
+  function end() {
+    running = false; clearInterval(tick); clearTimeout(spawnT);
+    pits.forEach(function (p, i) { if (p.up) goDown(i); });
+    board.classList.remove('playing'); mallet.classList.remove('show');
+    var isBest = score > best; if (isBest) { best = score; lsSet(KEY_BEST, String(best)); bestEl.textContent = best; }
+    sfx.end();
+    card.dataset.mode = 'over';
+    card.innerHTML = '<h2>' + (isBest && score > 0 ? 'New best!' : "Time's up!") + '</h2><div class="big">' + score + '</div><p>Best: ' + best + '</p>';
+    var b = document.createElement('button'); b.className = 'btn'; b.type = 'button'; b.textContent = 'Play again';
+    b.addEventListener('click', start); card.appendChild(b);
+    overlay.hidden = false; b.focus({ preventScroll: true });
+  }
+
+  /* ---------- mallet cursor (mouse and pen only) ---------- */
+  board.addEventListener('pointermove', function (e) {
+    if (!running || e.pointerType === 'touch') return;
+    mallet.classList.add('show');
+    mallet.style.transform = 'translate(' + (e.clientX - 20) + 'px,' + (e.clientY - 22) + 'px)';
+  });
+  board.addEventListener('pointerleave', function () { mallet.classList.remove('show'); });
+  board.addEventListener('pointerdown', function (e) { if (e.pointerType !== 'touch') { mallet.classList.add('swing'); setTimeout(function () { mallet.classList.remove('swing'); }, 90); } });
+
+  /* ---------- boot ---------- */
+  bestEl.textContent = best; timeEl.textContent = settings.dur;
+  renderRoster();
+})();
+</script>
+
+</body>
+</html>
